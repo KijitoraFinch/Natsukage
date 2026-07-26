@@ -766,12 +766,13 @@ select:focus-visible {
 }
 
 .terminal-toolbar {
-  height: 32px;
+  min-height: 32px;
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  padding: 0 14px;
+  gap: 4px 12px;
+  padding: 7px 14px;
   border-bottom: 1px solid var(--line);
   color: var(--ctp-subtext0);
   background: var(--ctp-mantle);
@@ -792,6 +793,13 @@ select:focus-visible {
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#terminal-host-key {
+  grid-column: 1 / -1;
+  color: var(--ctp-subtext0);
+  font: inherit;
+  overflow-wrap: anywhere;
 }
 
 .terminal-container {

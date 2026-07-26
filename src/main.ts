@@ -14,6 +14,11 @@ import {
   hasPersistentIPNState,
   PersistentIPNStateStorage,
 } from "./storage"
+import {
+  readLocalStorage,
+  removeLocalStorage,
+  writeLocalStorage,
+} from "./browser-storage"
 
 const REMEMBER_PREFERENCE_KEY = "natsukage-restore-ephemeral"
 const HOSTNAME_KEY = "natsukage-hostname"
@@ -33,12 +38,8 @@ function isColorScheme(value: string | null): value is ColorScheme {
 }
 
 function savedColorScheme(): ColorScheme {
-  try {
-    const value = localStorage.getItem(COLOR_SCHEME_KEY)
-    return isColorScheme(value) ? value : "mocha"
-  } catch {
-    return "mocha"
-  }
+  const value = readLocalStorage(COLOR_SCHEME_KEY)
+  return isColorScheme(value) ? value : "mocha"
 }
 
 function colorSchemeOptions(): string {
@@ -226,6 +227,7 @@ document.querySelector("#app")!.innerHTML = `
             <div class="terminal-toolbar">
               <span id="terminal-title">SSH</span>
               <span id="terminal-progress"></span>
+              <code id="terminal-host-key" hidden></code>
             </div>
             <div id="terminal" class="terminal-container"></div>
           </div>
@@ -275,6 +277,8 @@ class NatsukageApp {
   readonly #terminalTitle = requiredElement<HTMLElement>("#terminal-title")
   readonly #terminalProgress =
     requiredElement<HTMLElement>("#terminal-progress")
+  readonly #terminalHostKey =
+    requiredElement<HTMLElement>("#terminal-host-key")
   readonly #errorPanel = requiredElement<HTMLElement>("#error-panel")
   readonly #errorMessage = requiredElement<HTMLElement>("#error-message")
   readonly #status = requiredElement<HTMLElement>("#tailnet-status")
@@ -305,7 +309,7 @@ class NatsukageApp {
     }
 
     this.#rememberCheckbox.checked =
-      localStorage.getItem(REMEMBER_PREFERENCE_KEY) === "true"
+      readLocalStorage(REMEMBER_PREFERENCE_KEY) === "true"
 
     try {
       this.#savedStateNote.hidden = !(await hasPersistentIPNState())
@@ -343,7 +347,12 @@ class NatsukageApp {
 
   async start(): Promise<void> {
     this.#remember = this.#rememberCheckbox.checked
-    localStorage.setItem(REMEMBER_PREFERENCE_KEY, String(this.#remember))
+    if (
+      !writeLocalStorage(REMEMBER_PREFERENCE_KEY, String(this.#remember))
+    ) {
+      this.#remember = false
+      this.#rememberCheckbox.checked = false
+    }
     this.#startButton.disabled = true
     this.showOnly(this.#connectingPanel)
 
@@ -371,10 +380,10 @@ class NatsukageApp {
 
       const hostname =
         this.#remember
-          ? localStorage.getItem(HOSTNAME_KEY) || randomHostname()
+          ? readLocalStorage(HOSTNAME_KEY) || randomHostname()
           : randomHostname()
       if (this.#remember) {
-        localStorage.setItem(HOSTNAME_KEY, hostname)
+        writeLocalStorage(HOSTNAME_KEY, hostname)
       }
 
       this.#connectingDetail.textContent =
@@ -581,7 +590,7 @@ class NatsukageApp {
       picker.value = value
     }
     if (persist) {
-      localStorage.setItem(COLOR_SCHEME_KEY, value)
+      writeLocalStorage(COLOR_SCHEME_KEY, value)
     }
   }
 
@@ -638,6 +647,8 @@ class NatsukageApp {
     this.#terminalTitle.textContent =
       `${username}@${shortName(this.#selectedPeer.name)}`
     this.#terminalProgress.textContent = "connecting…"
+    this.#terminalHostKey.textContent = ""
+    this.#terminalHostKey.hidden = true
 
     runSSHSession(
       this.#terminal,
@@ -653,6 +664,10 @@ class NatsukageApp {
       {
         onConnectionProgress: (message) => {
           this.#terminalProgress.textContent = message
+          if (message.startsWith("SSH host key ")) {
+            this.#terminalHostKey.textContent = message
+            this.#terminalHostKey.hidden = false
+          }
         },
         onConnected: () => {
           this.#terminalProgress.textContent = "connected"
@@ -709,8 +724,8 @@ class NatsukageApp {
   async clearSavedState(): Promise<void> {
     try {
       await clearPersistentIPNState()
-      localStorage.removeItem(HOSTNAME_KEY)
-      localStorage.removeItem(REMEMBER_PREFERENCE_KEY)
+      removeLocalStorage(HOSTNAME_KEY)
+      removeLocalStorage(REMEMBER_PREFERENCE_KEY)
       this.#rememberCheckbox.checked = false
       this.#savedStateNote.hidden = true
     } catch (error) {
@@ -734,8 +749,8 @@ class NatsukageApp {
       this.#storage?.close()
       this.#storage = undefined
       await clearPersistentIPNState()
-      localStorage.removeItem(HOSTNAME_KEY)
-      localStorage.removeItem(REMEMBER_PREFERENCE_KEY)
+      removeLocalStorage(HOSTNAME_KEY)
+      removeLocalStorage(REMEMBER_PREFERENCE_KEY)
       location.reload()
     } catch (error) {
       this.showError(error)
