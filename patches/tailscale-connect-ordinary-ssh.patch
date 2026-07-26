@@ -1,7 +1,39 @@
 diff --git a/cmd/tsconnect/wasm/wasm_js.go b/cmd/tsconnect/wasm/wasm_js.go
-index f58e420..d58b2a4 100644
+index f58e420..41885ac 100644
 --- a/cmd/tsconnect/wasm/wasm_js.go
 +++ b/cmd/tsconnect/wasm/wasm_js.go
+@@ -187,6 +187,14 @@ func newIPN(jsConfig js.Value) map[string]any {
+ 			jsIPN.logout()
+ 			return nil
+ 		}),
++		"refreshNetMap": js.FuncOf(func(this js.Value, args []js.Value) any {
++			if len(args) != 0 {
++				log.Printf("Usage: refreshNetMap()")
++				return nil
++			}
++			jsIPN.refreshNetMap()
++			return nil
++		}),
+ 		"ssh": js.FuncOf(func(this js.Value, args []js.Value) any {
+ 			if len(args) != 3 {
+ 				log.Printf("Usage: ssh(hostname, userName, termConfig)")
+@@ -345,6 +353,16 @@ func (i *jsIPN) logout() {
+ 	}()
+ }
+ 
++// refreshNetMap publishes a fresh snapshot whose peer list comes from the
++// live node backend, including incremental peer updates received since the
++// last full control-plane netmap.
++func (i *jsIPN) refreshNetMap() {
++	nm := i.lb.NetMapWithPeers()
++	if nm != nil {
++		i.lb.SendNotify(ipn.Notify{SelfChange: nm.SelfNode.AsStruct()})
++	}
++}
++
+ func (i *jsIPN) ssh(host, username string, termConfig js.Value) map[string]any {
+ 	jsSSHSession := &jsSSHSession{
+ 		jsIPN:      i,
 @@ -405,6 +405,42 @@ func (s *jsSSHSession) Run() {
  		onConnectionProgress.Invoke(message)
  	}
@@ -101,9 +133,17 @@ index 5fae4a5..9f6c72a 100644
    // Make terminal and SSH session track the size of the containing DOM node.
    resizeObserver = new parentWindow.ResizeObserver(() => fitAddon.fit())
 diff --git a/cmd/tsconnect/src/types/wasm_js.d.ts b/cmd/tsconnect/src/types/wasm_js.d.ts
-index 938ec75..2e6b004 100644
+index 938ec75..4350a8e 100644
 --- a/cmd/tsconnect/src/types/wasm_js.d.ts
 +++ b/cmd/tsconnect/src/types/wasm_js.d.ts
+@@ -13,6 +13,7 @@ declare global {
+     run(callbacks: IPNCallbacks): void
+     login(): void
+     logout(): void
++    refreshNetMap(): void
+     ssh(
+       host: string,
+       username: string,
 @@ -22,6 +22,9 @@ declare global {
          setReadFn: (readFn: (data: string) => void) => void
          rows: number

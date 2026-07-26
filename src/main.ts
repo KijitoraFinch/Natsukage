@@ -218,6 +218,7 @@ document.querySelector("#app")!.innerHTML = `
                        autocomplete="off">
               </div>
 
+              <p id="ssh-error" class="ssh-error" role="alert" hidden></p>
               <button class="primary-button compact" type="submit">Connect</button>
               <p>Credentials stay in this tab and are never saved.</p>
             </form>
@@ -255,6 +256,8 @@ class NatsukageApp {
     requiredElement<HTMLElement>("#preflight-shell")
   readonly #workspace = requiredElement<HTMLElement>("#workspace")
   readonly #machineList = requiredElement<HTMLElement>("#machine-list")
+  readonly #refreshButton =
+    requiredElement<HTMLButtonElement>("#refresh-button")
   readonly #sessionEmpty = requiredElement<HTMLElement>("#session-empty")
   readonly #sshFormPanel = requiredElement<HTMLElement>("#ssh-form-panel")
   readonly #sshForm = requiredElement<HTMLFormElement>("#ssh-form")
@@ -272,6 +275,7 @@ class NatsukageApp {
     requiredElement<HTMLElement>("#password-fields")
   readonly #passwordInput =
     requiredElement<HTMLInputElement>("#ssh-password")
+  readonly #sshError = requiredElement<HTMLElement>("#ssh-error")
   readonly #terminalPanel = requiredElement<HTMLElement>("#terminal-panel")
   readonly #terminal = requiredElement<HTMLDivElement>("#terminal")
   readonly #terminalTitle = requiredElement<HTMLElement>("#terminal-title")
@@ -299,6 +303,7 @@ class NatsukageApp {
   #loginRequested = false
   #remember = false
   #terminalActive = false
+  #sshFailure?: string
 
   async initialize(): Promise<void> {
     this.setColorScheme(INITIAL_COLOR_SCHEME, false)
@@ -326,8 +331,8 @@ class NatsukageApp {
       "click",
       () => void this.forgetAndLogout(),
     )
-    requiredElement("#refresh-button").addEventListener("click", () => {
-      this.renderMachines()
+    this.#refreshButton.addEventListener("click", () => {
+      this.refreshMachines()
     })
     requiredElement("#back-button").addEventListener("click", () => {
       this.showMachinePicker()
@@ -464,6 +469,8 @@ class NatsukageApp {
   }
 
   handleNetMap(value: string): void {
+    this.#refreshButton.disabled = false
+    this.#refreshButton.removeAttribute("aria-busy")
     try {
       this.#netMap = JSON.parse(value) as IPNNetMap
     } catch {
@@ -498,6 +505,19 @@ class NatsukageApp {
     if (this.#authWindow && !this.#authWindow.closed) {
       this.#authWindow.location.replace(url)
     }
+  }
+
+  refreshMachines(): void {
+    if (!this.#ipn || this.#ipnState !== "Running") {
+      return
+    }
+    this.#refreshButton.disabled = true
+    this.#refreshButton.setAttribute("aria-busy", "true")
+    this.#ipn.refreshNetMap()
+    window.setTimeout(() => {
+      this.#refreshButton.disabled = false
+      this.#refreshButton.removeAttribute("aria-busy")
+    }, 2_000)
   }
 
   renderMachines(): void {
@@ -552,6 +572,9 @@ class NatsukageApp {
 
   selectPeer(peer: IPNNetMapPeerNode): void {
     this.#selectedPeer = peer
+    this.#sshFailure = undefined
+    this.#sshError.textContent = ""
+    this.#sshError.hidden = true
     this.renderMachines()
     this.#sessionEmpty.hidden = true
     this.#terminalPanel.hidden = true
@@ -649,6 +672,9 @@ class NatsukageApp {
     this.#terminalProgress.textContent = "connecting…"
     this.#terminalHostKey.textContent = ""
     this.#terminalHostKey.hidden = true
+    this.#sshFailure = undefined
+    this.#sshError.textContent = ""
+    this.#sshError.hidden = true
 
     runSSHSession(
       this.#terminal,
@@ -673,12 +699,26 @@ class NatsukageApp {
           this.#terminalProgress.textContent = "connected"
         },
         onError: (error) => {
+          const detail = error.trim() || "SSH connection failed."
+          this.#sshFailure = detail
+          this.#sshError.textContent = detail
+          this.#sshError.hidden = false
           this.#terminalProgress.textContent = "error"
           console.error("SSH error", error)
         },
         onDone: () => {
           this.#terminalActive = false
           this.setColorSchemeEnabled(true)
+          if (this.#sshFailure) {
+            this.#terminalPanel.hidden = true
+            this.#sshFormPanel.hidden = false
+            const retryInput =
+              this.#authMethod.value === "private-key"
+                ? this.#privateKeyInput
+                : this.#passwordInput
+            retryInput.focus()
+            return
+          }
           this.#terminalProgress.textContent = "closed"
           window.setTimeout(() => this.showMachinePicker(), 600)
         },

@@ -756,6 +756,18 @@ select:focus-visible {
   font-size: 10px;
 }
 
+#ssh-form .ssh-error {
+  margin: 2px 0 4px;
+  padding: 8px 10px;
+  color: var(--ctp-maroon);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .terminal-panel {
   flex: 1;
   min-width: 0;
@@ -885,7 +897,11 @@ select:focus-visible {
   }
 
   .sidebar-footer {
-    display: none;
+    padding: 5px 10px;
+  }
+
+  .sidebar-footer .danger-text-button {
+    padding: 4px;
   }
 
   .primary-button.compact {

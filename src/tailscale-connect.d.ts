@@ -55,6 +55,7 @@ declare module "@tailscale/connect" {
     run(callbacks: IPNCallbacks): void
     login(): void
     logout(): void
+    refreshNetMap(): void
     ssh(
       host: string,
       username: string,
