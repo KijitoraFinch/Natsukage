@@ -19,7 +19,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "fake-indexeddb": "^6.2.0",
-    "typescript": "^5.9.0",
+    "typescript": "^7.0.2",
     "vite": "^7.0.0",
     "vitest": "^3.2.0"
   }
