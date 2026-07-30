@@ -1,0 +1,8 @@
+# Shallow clones used only for implementation research.
+/references/
+
+/node_modules/
+/dist/
+/vendor/tailscale-connect/
+*.log
+.DS_Store

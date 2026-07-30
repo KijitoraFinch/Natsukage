@@ -1,0 +1,26 @@
+{
+  "name": "natsukage",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "vendor:build": "bash scripts/build-tailscale-connect.sh",
+    "vendor:rebuild": "bash scripts/build-tailscale-connect.sh --force",
+    "dev": "npm run vendor:build && vite",
+    "build": "npm run vendor:build && npm run build:app",
+    "build:app": "tsc --noEmit && vite build && bash scripts/package-dist.sh",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "fake-indexeddb": "^6.2.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,156 @@
+diff --git a/cmd/tsconnect/wasm/wasm_js.go b/cmd/tsconnect/wasm/wasm_js.go
+index f58e420..41885ac 100644
+--- a/cmd/tsconnect/wasm/wasm_js.go
++++ b/cmd/tsconnect/wasm/wasm_js.go
+@@ -187,6 +187,14 @@ func newIPN(jsConfig js.Value) map[string]any {
+ 			jsIPN.logout()
+ 			return nil
+ 		}),
++		"refreshNetMap": js.FuncOf(func(this js.Value, args []js.Value) any {
++			if len(args) != 0 {
++				log.Printf("Usage: refreshNetMap()")
++				return nil
++			}
++			jsIPN.refreshNetMap()
++			return nil
++		}),
+ 		"ssh": js.FuncOf(func(this js.Value, args []js.Value) any {
+ 			if len(args) != 3 {
+ 				log.Printf("Usage: ssh(hostname, userName, termConfig)")
+@@ -345,6 +353,16 @@ func (i *jsIPN) logout() {
+ 	}()
+ }
+ 
++// refreshNetMap publishes a fresh snapshot whose peer list comes from the
++// live node backend, including incremental peer updates received since the
++// last full control-plane netmap.
++func (i *jsIPN) refreshNetMap() {
++	nm := i.lb.NetMapWithPeers()
++	if nm != nil {
++		i.lb.SendNotify(ipn.Notify{SelfChange: nm.SelfNode.AsStruct()})
++	}
++}
++
+ func (i *jsIPN) ssh(host, username string, termConfig js.Value) map[string]any {
+ 	jsSSHSession := &jsSSHSession{
+ 		jsIPN:      i,
+@@ -405,6 +405,42 @@ func (s *jsSSHSession) Run() {
+ 		onConnectionProgress.Invoke(message)
+ 	}
+ 
++	var auth []ssh.AuthMethod
++	if jsPrivateKey := s.termConfig.Get("privateKey"); jsPrivateKey.Type() == js.TypeString && jsPrivateKey.String() != "" {
++		privateKey := jsPrivateKey.String()
++		passphrase := ""
++		if jsPassphrase := s.termConfig.Get("privateKeyPassphrase"); jsPassphrase.Type() == js.TypeString {
++			passphrase = jsPassphrase.String()
++		}
++
++		var signer ssh.Signer
++		var err error
++		if passphrase == "" {
++			signer, err = ssh.ParsePrivateKey([]byte(privateKey))
++		} else {
++			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(privateKey), []byte(passphrase))
++		}
++		if err != nil {
++			writeError("SSH Private Key", err)
++			return
++		}
++		auth = append(auth, ssh.PublicKeys(signer))
++	}
++	if jsPassword := s.termConfig.Get("password"); jsPassword.Type() == js.TypeString && jsPassword.String() != "" {
++		auth = append(auth, ssh.Password(jsPassword.String()))
++	}
++
++	// Credentials are never persisted. Clear the JavaScript references as soon
++	// as the Go SSH authentication methods have been constructed.
++	s.termConfig.Set("privateKey", "")
++	s.termConfig.Set("privateKeyPassphrase", "")
++	s.termConfig.Set("password", "")
++
++	if len(auth) == 0 {
++		writeError("SSH Authentication", fmt.Errorf("password or private key is required"))
++		return
++	}
++
+ 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds*float64(time.Second)))
+ 	defer cancel()
+ 	reportProgress(fmt.Sprintf("Connecting to %s…", strings.Split(s.host, ".")[0]))
+@@ -417,12 +453,15 @@ func (s *jsSSHSession) Run() {
+ 
+ 	config := &ssh.ClientConfig{
+ 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+-			// Host keys are not used with Tailscale SSH, but we can use this
+-			// callback to know that the connection has been established.
++			// The outer Tailscale connection authenticates the destination
++			// node. Report the SSH fingerprint for visibility while trusting
++			// that Tailnet identity.
++			reportProgress(fmt.Sprintf("SSH host key %s", ssh.FingerprintSHA256(key)))
+ 			reportProgress("SSH connection established…")
+ 			return nil
+ 		},
+ 		User: s.username,
++		Auth: auth,
+ 	}
+ 
+ 	reportProgress("Starting SSH client…")
+diff --git a/cmd/tsconnect/src/lib/ssh.ts b/cmd/tsconnect/src/lib/ssh.ts
+index 5fae4a5..9f6c72a 100644
+--- a/cmd/tsconnect/src/lib/ssh.ts
++++ b/cmd/tsconnect/src/lib/ssh.ts
+@@ -8,6 +8,12 @@ import { WebLinksAddon } from "xterm-addon-web-links"
+ export type SSHSessionDef = {
+   username: string
+   hostname: string
++  /** Password authentication for an ordinary SSH server. */
++  password?: string
++  /** PEM or OpenSSH private key used only inside the browser. */
++  privateKey?: string
++  /** Passphrase for an encrypted private key. */
++  privateKeyPassphrase?: string
+   /** Defaults to 5 seconds */
+   timeoutSeconds?: number
+ }
+@@ -66,6 +72,9 @@ export function runSSHSession(
+     },
+     rows: term.rows,
+     cols: term.cols,
++    password: def.password,
++    privateKey: def.privateKey,
++    privateKeyPassphrase: def.privateKeyPassphrase,
+     onConnectionProgress: callbacks.onConnectionProgress,
+     onConnected: callbacks.onConnected,
+     onDone() {
+@@ -78,6 +87,9 @@ export function runSSHSession(
+     },
+     timeoutSeconds: def.timeoutSeconds,
+   })
++  def.password = undefined
++  def.privateKey = undefined
++  def.privateKeyPassphrase = undefined
+ 
+   // Make terminal and SSH session track the size of the containing DOM node.
+   resizeObserver = new parentWindow.ResizeObserver(() => fitAddon.fit())
+diff --git a/cmd/tsconnect/src/types/wasm_js.d.ts b/cmd/tsconnect/src/types/wasm_js.d.ts
+index 938ec75..4350a8e 100644
+--- a/cmd/tsconnect/src/types/wasm_js.d.ts
++++ b/cmd/tsconnect/src/types/wasm_js.d.ts
+@@ -13,6 +13,7 @@ declare global {
+     run(callbacks: IPNCallbacks): void
+     login(): void
+     logout(): void
++    refreshNetMap(): void
+     ssh(
+       host: string,
+       username: string,
+@@ -22,6 +22,9 @@ declare global {
+         setReadFn: (readFn: (data: string) => void) => void
+         rows: number
+         cols: number
++        password?: string
++        privateKey?: string
++        privateKeyPassphrase?: string
+         /** Defaults to 5 seconds */
+         timeoutSeconds?: number
+         onConnectionProgress: (message: string) => void
