@@ -154,7 +154,7 @@ document.querySelector("#app")!.innerHTML = `
         </div>
       </section>
 
-      <section id="workspace" class="workspace" hidden>
+      <section id="workspace" class="workspace" data-view="machines" hidden>
         <aside class="machine-sidebar">
           <div class="sidebar-heading">
             <span>hosts</span>
@@ -230,6 +230,23 @@ document.querySelector("#app")!.innerHTML = `
               <span id="terminal-progress"></span>
               <code id="terminal-host-key" hidden></code>
             </div>
+            <div class="terminal-keys" role="toolbar"
+                 aria-label="Terminal helper keys">
+              <button id="terminal-ctrl-key" class="terminal-key modifier-key"
+                      type="button" aria-pressed="false">Ctrl</button>
+              <button class="terminal-key" type="button"
+                      data-terminal-key="Escape">Esc</button>
+              <button class="terminal-key" type="button"
+                      data-terminal-key="Tab">Tab</button>
+              <button class="terminal-key symbol-key" type="button"
+                      data-terminal-key="ArrowUp" aria-label="Up arrow">↑</button>
+              <button class="terminal-key symbol-key" type="button"
+                      data-terminal-key="ArrowDown" aria-label="Down arrow">↓</button>
+              <button class="terminal-key symbol-key" type="button"
+                      data-terminal-key="ArrowLeft" aria-label="Left arrow">←</button>
+              <button class="terminal-key symbol-key" type="button"
+                      data-terminal-key="ArrowRight" aria-label="Right arrow">→</button>
+            </div>
             <div id="terminal" class="terminal-container"></div>
           </div>
         </section>
@@ -283,6 +300,8 @@ class NatsukageApp {
     requiredElement<HTMLElement>("#terminal-progress")
   readonly #terminalHostKey =
     requiredElement<HTMLElement>("#terminal-host-key")
+  readonly #terminalCtrlKey =
+    requiredElement<HTMLButtonElement>("#terminal-ctrl-key")
   readonly #errorPanel = requiredElement<HTMLElement>("#error-panel")
   readonly #errorMessage = requiredElement<HTMLElement>("#error-message")
   readonly #status = requiredElement<HTMLElement>("#tailnet-status")
@@ -303,6 +322,7 @@ class NatsukageApp {
   #loginRequested = false
   #remember = false
   #terminalActive = false
+  #ctrlLatched = false
   #sshFailure?: string
 
   async initialize(): Promise<void> {
@@ -347,7 +367,104 @@ class NatsukageApp {
     this.#authMethod.addEventListener("change", () => {
       this.updateAuthenticationFields()
     })
+    this.#terminalCtrlKey.addEventListener("click", () => {
+      this.setCtrlLatched(!this.#ctrlLatched)
+      this.focusTerminal()
+    })
+    this.#terminalCtrlKey.addEventListener("pointerdown", (event) => {
+      event.preventDefault()
+    })
+    for (const button of document.querySelectorAll<HTMLButtonElement>(
+      "[data-terminal-key]",
+    )) {
+      // Keep the xterm textarea focused so tapping a helper key does not close
+      // the mobile software keyboard.
+      button.addEventListener("pointerdown", (event) => event.preventDefault())
+      button.addEventListener("click", () => {
+        const key = button.dataset.terminalKey
+        if (key) {
+          this.sendTerminalKey(key, this.#ctrlLatched)
+          this.setCtrlLatched(false)
+        }
+      })
+    }
+    this.#terminal.addEventListener(
+      "keydown",
+      (event) => this.handleTerminalKeyDown(event),
+      true,
+    )
     this.updateAuthenticationFields()
+  }
+
+  setCtrlLatched(latched: boolean): void {
+    this.#ctrlLatched = latched
+    this.#terminalCtrlKey.setAttribute("aria-pressed", String(latched))
+  }
+
+  focusTerminal(): HTMLTextAreaElement | null {
+    const input = this.#terminal.querySelector<HTMLTextAreaElement>(
+      ".xterm-helper-textarea",
+    )
+    input?.focus({ preventScroll: true })
+    return input
+  }
+
+  terminalKeyCode(key: string): number {
+    const specialKeys: Record<string, number> = {
+      Escape: 27,
+      Tab: 9,
+      ArrowLeft: 37,
+      ArrowUp: 38,
+      ArrowRight: 39,
+      ArrowDown: 40,
+    }
+    if (specialKeys[key]) {
+      return specialKeys[key]
+    }
+    if (key.length === 1) {
+      return key.toUpperCase().charCodeAt(0)
+    }
+    return 0
+  }
+
+  sendTerminalKey(
+    key: string,
+    ctrlKey = false,
+    keyCode = this.terminalKeyCode(key),
+  ): void {
+    const input = this.focusTerminal()
+    if (!input) {
+      return
+    }
+    const event = new KeyboardEvent("keydown", {
+      key,
+      code: key,
+      ctrlKey,
+      bubbles: true,
+      cancelable: true,
+    })
+    // xterm's key mapper uses the legacy keyCode value for control and
+    // navigation sequences. KeyboardEvent's constructor cannot set it.
+    Object.defineProperty(event, "keyCode", { value: keyCode })
+    input.dispatchEvent(event)
+  }
+
+  handleTerminalKeyDown(event: KeyboardEvent): void {
+    if (
+      !this.#ctrlLatched ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey ||
+      event.isComposing ||
+      event.key.length !== 1
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    this.setCtrlLatched(false)
+    this.sendTerminalKey(event.key, true, event.keyCode)
   }
 
   async start(): Promise<void> {
@@ -579,6 +696,7 @@ class NatsukageApp {
     this.#sessionEmpty.hidden = true
     this.#terminalPanel.hidden = true
     this.#sshFormPanel.hidden = false
+    this.#workspace.dataset.view = "form"
     requiredElement("#selected-machine-name").textContent = shortName(peer.name)
     requiredElement("#selected-machine-ip").textContent =
       peer.addresses[0] ?? peer.name
@@ -593,6 +711,7 @@ class NatsukageApp {
     this.#sshFormPanel.hidden = true
     this.#terminalPanel.hidden = true
     this.#sessionEmpty.hidden = false
+    this.#workspace.dataset.view = "machines"
     this.renderMachines()
   }
 
@@ -666,12 +785,14 @@ class NatsukageApp {
     this.#sshFormPanel.hidden = true
     this.#sessionEmpty.hidden = true
     this.#terminalPanel.hidden = false
+    this.#workspace.dataset.view = "terminal"
     this.#terminal.replaceChildren()
     this.#terminalTitle.textContent =
       `${username}@${shortName(this.#selectedPeer.name)}`
     this.#terminalProgress.textContent = "connecting…"
     this.#terminalHostKey.textContent = ""
     this.#terminalHostKey.hidden = true
+    this.setCtrlLatched(false)
     this.#sshFailure = undefined
     this.#sshError.textContent = ""
     this.#sshError.hidden = true
@@ -708,10 +829,12 @@ class NatsukageApp {
         },
         onDone: () => {
           this.#terminalActive = false
+          this.setCtrlLatched(false)
           this.setColorSchemeEnabled(true)
           if (this.#sshFailure) {
             this.#terminalPanel.hidden = true
             this.#sshFormPanel.hidden = false
+            this.#workspace.dataset.view = "form"
             const retryInput =
               this.#authMethod.value === "private-key"
                 ? this.#privateKeyInput

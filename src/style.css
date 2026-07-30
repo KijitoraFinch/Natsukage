@@ -155,6 +155,19 @@ body,
   margin: 0;
 }
 
+@supports (height: 100dvh) {
+  html,
+  body,
+  #app {
+    height: 100dvh;
+  }
+}
+
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 button,
 input,
 select {
@@ -821,6 +834,10 @@ select:focus-visible {
   overflow: hidden;
 }
 
+.terminal-keys {
+  display: none;
+}
+
 .terminal-container .xterm {
   height: 100%;
 }
@@ -871,41 +888,255 @@ select:focus-visible {
 }
 
 @media (max-width: 760px) {
+  .app-shell,
+  .app-main {
+    height: 100%;
+  }
+
+  .preflight-shell {
+    padding:
+      max(16px, env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+
+  .preflight-header {
+    padding-right: 10px;
+    padding-left: 12px;
+  }
+
+  .welcome-panel,
+  .connecting-panel,
+  .error-panel {
+    padding: 24px 20px;
+  }
+
+  .connecting-panel,
+  .error-panel {
+    align-items: flex-start;
+  }
+
   .workspace {
     grid-template-columns: 1fr;
-    grid-template-rows: 245px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .machine-sidebar {
     border-right: 0;
-    border-bottom: 1px solid var(--line);
+    padding-top: env(safe-area-inset-top);
+    border-bottom: 0;
   }
 
   .sidebar-heading {
-    min-height: 38px;
-    padding: 0 10px;
+    min-height: 52px;
+    padding:
+      0 max(12px, env(safe-area-inset-right))
+      0 max(14px, env(safe-area-inset-left));
+  }
+
+  .sidebar-tools {
+    gap: 6px;
+  }
+
+  .scheme-select {
+    height: 36px;
+    max-width: 104px;
+    font-size: 11px;
+  }
+
+  .icon-button {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
   }
 
   .machine-list {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
+    display: block;
+    padding: 8px max(8px, env(safe-area-inset-right)) 8px
+      max(8px, env(safe-area-inset-left));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .machine-button {
-    min-width: 220px;
+    min-width: 0;
+    min-height: 58px;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+
+  .machine-copy strong {
+    font-size: 14px;
+  }
+
+  .machine-copy small {
+    font-size: 11px;
   }
 
   .sidebar-footer {
-    padding: 5px 10px;
+    padding:
+      8px max(12px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
   }
 
   .sidebar-footer .danger-text-button {
-    padding: 4px;
+    min-height: 44px;
+    padding: 8px;
+  }
+
+  .session-area {
+    display: none;
+  }
+
+  .workspace[data-view="form"] .machine-sidebar,
+  .workspace[data-view="terminal"] .machine-sidebar {
+    display: none;
+  }
+
+  .workspace[data-view="form"] .session-area,
+  .workspace[data-view="terminal"] .session-area {
+    display: flex;
+  }
+
+  .ssh-form-panel {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding:
+      max(14px, env(safe-area-inset-top))
+      max(18px, env(safe-area-inset-right))
+      max(24px, env(safe-area-inset-bottom))
+      max(18px, env(safe-area-inset-left));
+    border: 0;
+    border-radius: 0;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .back-button {
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0 0 14px;
+    text-align: left;
+  }
+
+  .selected-machine {
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+
+  .selected-machine h2 {
+    margin-top: 3px;
+    font-size: clamp(24px, 8vw, 30px);
+    overflow-wrap: anywhere;
+  }
+
+  #ssh-form input[type="text"],
+  #ssh-form input[type="password"],
+  #ssh-form input[type="file"],
+  #ssh-form select {
+    min-height: 48px;
+    font-size: 16px;
   }
 
   .primary-button.compact {
     width: 100%;
+  }
+
+  .terminal-toolbar {
+    min-height: calc(40px + env(safe-area-inset-top));
+    padding:
+      calc(7px + env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right)) 7px
+      max(10px, env(safe-area-inset-left));
+  }
+
+  .terminal-keys {
+    min-height: 48px;
+    flex: 0 0 auto;
+    display: flex;
+    gap: 6px;
+    padding: 5px max(8px, env(safe-area-inset-right)) 5px
+      max(8px, env(safe-area-inset-left));
+    overflow-x: auto;
+    border-bottom: 1px solid var(--line);
+    background: var(--ctp-mantle);
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .terminal-keys::-webkit-scrollbar {
+    display: none;
+  }
+
+  .terminal-key {
+    min-width: 44px;
+    min-height: 38px;
+    flex: 1 0 44px;
+    padding: 0 10px;
+    color: var(--ctp-subtext1);
+    border: 1px solid var(--ctp-surface1);
+    border-radius: 7px;
+    background: var(--ctp-surface0);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    touch-action: manipulation;
+  }
+
+  .terminal-key:active,
+  .terminal-key[aria-pressed="true"] {
+    color: var(--ctp-crust);
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .terminal-key.modifier-key {
+    min-width: 56px;
+    flex-basis: 56px;
+  }
+
+  .terminal-key.symbol-key {
+    font-size: 16px;
+  }
+
+  .terminal-container {
+    padding: 6px max(5px, env(safe-area-inset-right))
+      max(6px, env(safe-area-inset-bottom))
+      max(5px, env(safe-area-inset-left));
+  }
+}
+
+@media (max-width: 380px) {
+  .preflight-header > span {
+    max-width: 64px;
+    line-height: 1.25;
+  }
+
+  .preflight-controls {
+    gap: 4px;
+  }
+
+  .preflight-controls .scheme-select {
+    max-width: 88px;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 520px) {
+  .ssh-form-panel {
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+
+  .back-button {
+    margin-bottom: 6px;
+  }
+
+  .selected-machine {
+    margin-bottom: 14px;
   }
 }
 
