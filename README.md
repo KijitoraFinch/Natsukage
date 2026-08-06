@@ -1,11 +1,12 @@
 # Natsukage
 
-ブラウザを一時的なTailscaleノードとしてTailnetへ参加させ、通常の`sshd`が
-動いている端末へSSHする静的Webアプリです。Tailscale SSHは使用しません。
+## これは何
+
+Tailscale SSHを設定する必要なく、通常の`sshd`が稼働しているTailnet内のデバイスに直接sshできる、完全にブラウザ完結のWebアプリ
 
 ## 開発
 
-必要なものはNode.js 24、Git、Bashです。Tailscaleの固定ソース、Go toolchain、
+Node.js 24、Git、Bashに依存します。Tailscaleのソース、Go toolchain、
 Binaryen、JavaScript依存関係を初回ビルド時に取得するため、ネットワーク接続も
 必要です。
 
@@ -20,14 +21,7 @@ npm run dev
 アセットは`npm run build`で`dist/`へ生成されます。
 
 ## 使い方
-
-1. 「Tailscaleで接続」からTailnetへログインする
-2. オンライン端末を選ぶ
-3. OSユーザー名と、SSHパスワードまたはOpenSSH秘密鍵を指定する
-
-配色はCatppuccin Mocha、Macchiato、Frappé、Latteから選択でき、選択内容は
-ブラウザに保存されます。接続画面だけでなくターミナルのANSIカラーにも反映されます。
-
+信頼できる配信先にアクセスしてWebアプリを起動してください。
 接続先ではTailscaleと通常の`sshd`を起動し、Tailnet policyでブラウザノード
 から接続先のTCP/22を許可してください。`tailscale set --ssh`やTailscale
 SSH policyは不要です。
@@ -53,19 +47,6 @@ Tailnet接続とSSHクライアントには、BSD-3-Clauseの
 `63efd0693318903e13033dda4b503c75ad7aa24e`に
 [`patches/tailscale-connect-ordinary-ssh.patch`](patches/tailscale-connect-ordinary-ssh.patch)
 を適用します。
-
-生成済みのWASMやJavaScriptはリポジトリへcommitしません。
-[`scripts/build-tailscale-connect.sh`](scripts/build-tailscale-connect.sh)が
-固定commitだけをcheckoutし、patchの適用を検証してから、Tailscale側で固定された
-Go toolchainとBinaryenを使って`vendor/tailscale-connect`へ生成します。
-
-```sh
-npm run vendor:rebuild
-```
-
-生成物には上流commit、patchのSHA-256、toolchain version、各主要artifactの
-SHA-256を記録した`SOURCE.txt`を含めます。配信用の`dist/source/`にもこの情報と
-patchをコピーします。
 
 第三者コンポーネントの著作権表示とライセンス全文は
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)にまとめています。
@@ -97,4 +78,4 @@ release tagではなくcommit SHAで固定し、Dependabotで更新を追跡し�
 ## ライセンス
 
 本プロジェクトは[`MIT License`](LICENSE)で提供します。第三者コンポーネント
-には、それぞれのライセンスが適用されます。
+には個別のライセンスが適用されます。
